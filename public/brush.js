@@ -25,7 +25,6 @@ class Brush {
 
   prepare(image, mask) {
     this.image = image;
-    if (this.dirty) return true;
     const width = this.preview.naturalWidth;
     const height = this.preview.naturalHeight;
     if (!width || !height || (mask && (!this.overlay.complete || !this.overlay.naturalWidth))) return false;
@@ -38,7 +37,19 @@ class Brush {
       for (let i = 3; i < pixels.data.length; i += 4) pixels.data[i] = pixels.data[i] > 64 ? 255 : 0;
       this.context.putImageData(pixels, 0, 0);
     }
+    for (const stroke of this.strokes) {
+      for (let i = 0; i < stroke.points.length; i++) {
+        this.paint(stroke, stroke.points[i], stroke.points[i - 1]);
+      }
+    }
     return true;
+  }
+
+  restore(strokes, image, mask) {
+    this.reset();
+    this.strokes = strokes;
+    this.pointCount = strokes.reduce((count, stroke) => count + stroke.points.length, 0);
+    if (this.dirty) this.prepare(image, mask);
   }
 
   start(event, mode, diameter, image, mask) {
@@ -65,6 +76,12 @@ class Brush {
     if (last?.[0] === x && last?.[1] === y) return;
     stroke.points.push([x, y]);
     this.pointCount++;
+    this.paint(stroke, [x, y], last);
+    if (!last) this.onChange();
+  }
+
+  paint(stroke, [x, y], last) {
+    const { width, height } = this.image;
     const context = this.context;
     context.save();
     context.scale(this.canvas.width / width, this.canvas.height / height);
@@ -82,7 +99,6 @@ class Brush {
       context.fill();
     }
     context.restore();
-    if (!last) this.onChange();
   }
 
   stop(event) {

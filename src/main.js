@@ -9,6 +9,7 @@ const {
 const { NestFactory } = require('@nestjs/core');
 const { FileInterceptor } = require('@nestjs/platform-express');
 const { Tasks } = require('./tasks');
+const { MAX_EXPAND_RADIUS } = require('./images');
 
 const root = join(__dirname, '..');
 const upload = FileInterceptor('file', { limits: { fileSize: 32 * 1024 * 1024, files: 1 } });
@@ -74,6 +75,16 @@ class ImageController {
     return this.tasks.add('erase', { image, mask });
   }
 
+  expandSelection(imageId, body) {
+    const image = this.tasks.image(imageId);
+    const mask = this.tasks.mask(body?.maskId, image.id);
+    const radius = body?.radius;
+    if (!Number.isInteger(radius) || radius < 1 || radius > MAX_EXPAND_RADIUS) {
+      throw new BadRequestException('扩选距离须为 1 到 ' + MAX_EXPAND_RADIUS + ' 个原图像素');
+    }
+    return this.tasks.add('expand', { image, mask, radius });
+  }
+
   task(id) {
     return this.tasks.get(id);
   }
@@ -116,6 +127,9 @@ UploadedFile()(proto, 'importMask', 1);
 route('drawMask', Post, 'images/:imageId/masks/draw', HttpCode(202));
 Param('imageId')(proto, 'drawMask', 0);
 Body()(proto, 'drawMask', 1);
+route('expandSelection', Post, 'images/:imageId/masks/expand', HttpCode(202));
+Param('imageId')(proto, 'expandSelection', 0);
+Body()(proto, 'expandSelection', 1);
 route('erase', Post, 'erasures', HttpCode(202));
 Body()(proto, 'erase', 0);
 route('task', Get, 'tasks/:id');

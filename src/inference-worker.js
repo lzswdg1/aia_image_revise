@@ -1,7 +1,7 @@
 const { parentPort } = require('node:worker_threads');
 const { join } = require('node:path');
 const { Models } = require('./models');
-const { prepareImage, readMask, writeMask, paintStrokes } = require('./images');
+const { prepareImage, readMask, writeMask, paintStrokes, expandMask } = require('./images');
 
 const models = new Models();
 
@@ -33,6 +33,10 @@ async function run(job, stage) {
       : Buffer.alloc(image.width * image.height);
     paintStrokes(data, image.width, image.height, job.strokes);
     if (!data.includes(255)) return { result: { empty: true } };
+  } else if (type === 'expand') {
+    stage('计算扩选范围');
+    data = await readMask(job.mask.file, image.width, image.height);
+    expandMask(data, image.width, image.height, job.radius);
   } else {
     stage('校验导入的 mask');
     data = await readMask(input, image.width, image.height);

@@ -3,6 +3,7 @@ const sharp = require('sharp');
 const MAX_PIXELS = 7680 * 4320;
 const MAX_SIDE = 7680;
 const PREVIEW_SIDE = 1200;
+const MAX_EXPAND_RADIUS = 24;
 const options = { limitInputPixels: MAX_PIXELS };
 
 function rgb(input) {
@@ -108,4 +109,43 @@ function paintStrokes(mask, width, height, strokes) {
   }
 }
 
-module.exports = { MAX_PIXELS, MAX_SIDE, rgb, gray, prepareImage, readMask, writeMask, paintStrokes };
+// A square neighbourhood, computed in linear time even on an 8K image.
+function expandMask(mask, width, height, radius) {
+  const outside = radius + 1;
+  const rows = Buffer.alloc(mask.length);
+  for (let y = 0; y < height; y++) {
+    let distance = outside;
+    const offset = y * width;
+    for (let x = 0; x < width; x++) {
+      distance = mask[offset + x] ? 0 : distance + 1;
+      rows[offset + x] = distance <= radius ? 255 : 0;
+    }
+    distance = outside;
+    for (let x = width - 1; x >= 0; x--) {
+      distance = mask[offset + x] ? 0 : distance + 1;
+      if (distance <= radius) rows[offset + x] = 255;
+    }
+  }
+
+  const distances = new Int32Array(width).fill(outside);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const offset = y * width + x;
+      distances[x] = rows[offset] ? 0 : distances[x] + 1;
+      mask[offset] = distances[x] <= radius ? 255 : 0;
+    }
+  }
+  distances.fill(outside);
+  for (let y = height - 1; y >= 0; y--) {
+    for (let x = 0; x < width; x++) {
+      const offset = y * width + x;
+      distances[x] = rows[offset] ? 0 : distances[x] + 1;
+      if (distances[x] <= radius) mask[offset] = 255;
+    }
+  }
+  return mask;
+}
+
+module.exports = {
+  MAX_PIXELS, MAX_SIDE, MAX_EXPAND_RADIUS, rgb, gray, prepareImage, readMask, writeMask, paintStrokes, expandMask,
+};

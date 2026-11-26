@@ -105,8 +105,24 @@ async function checkCase(width, height, radius, testQueue = false) {
     assert.match(wrong.error, /尺寸/);
   }
 
+  const expandPath = '/api/images/' + image.id + '/masks/expand';
+  await api(expandPath, { json: { maskId: selected.id, radius: 25 }, status: 400 });
+  const expanded = (await done(await api(expandPath, {
+    json: { maskId: selected.id, radius: 4 }, status: 202,
+  }))).result;
+  assert.ok(expanded.areaPixels > selected.areaPixels);
+  assert.deepEqual(expanded.bbox, {
+    left: selected.bbox.left - 4, top: selected.bbox.top - 4,
+    width: selected.bbox.width + 8, height: selected.bbox.height + 8,
+  });
+  const effective = await sharp(await asset(expanded.maskUrl)).toColourspace('b-w').raw().toBuffer();
+  assert.equal(effective.length, predicted.length);
+  for (let i = 0; i < predicted.length; i++) {
+    if (predicted[i]) assert.equal(effective[i], 255, 'expansion must cover the original mask');
+  }
+
   const erase = await api('/api/erasures', {
-    json: { imageId: image.id, maskId: selected.id }, status: 202,
+    json: { imageId: image.id, maskId: expanded.id }, status: 202,
   });
   if (testQueue) {
     const cancelled = await api('/api/erasures', {
@@ -128,14 +144,17 @@ async function checkCase(width, height, radius, testQueue = false) {
   const { data: result, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   assert.deepEqual([info.width, info.height, info.channels], [width, height, 3]);
   let changed = 0;
+  let changedInExpansion = 0;
   for (let i = 0; i < predicted.length; i++) {
     const p = i * 3;
     if (result[p] !== sample.rgb[p] || result[p + 1] !== sample.rgb[p + 1] || result[p + 2] !== sample.rgb[p + 2]) {
-      assert.ok(predicted[i], 'unexpected pixel change outside mask at ' + i);
+      assert.ok(effective[i], 'unexpected pixel change outside expanded mask at ' + i);
+      if (!predicted[i]) changedInExpansion++;
       changed++;
     }
   }
   assert.ok(changed > selected.areaPixels / 2, 'model must replace most of the selected area');
+  assert.ok(changedInExpansion > 0, 'erase must use the expanded mask');
   const center = (sample.cy * width + sample.cx) * 3;
   assert.ok(Math.abs(result[center] - result[center + 1]) < 40, 'center should no longer be red');
 
@@ -144,7 +163,7 @@ async function checkCase(width, height, radius, testQueue = false) {
     await mkdir(output, { recursive: true });
     await Promise.all([
       writeFile(join(output, 'sample.png'), sample.png),
-      writeFile(join(output, 'mask.png'), await asset(selected.maskUrl)),
+      writeFile(join(output, 'mask.png'), await asset(expanded.maskUrl)),
       writeFile(join(output, 'erased.png'), png),
     ]);
   }
@@ -152,6 +171,7 @@ async function checkCase(width, height, radius, testQueue = false) {
     dimensions: [width, height],
     iou: Number(iou.toFixed(3)),
     areaPixels: selected.areaPixels,
+    expandedAreaPixels: expanded.areaPixels,
     encodeMs: selected.encodeMs,
     cachedClickMs: refined.runMs,
     eraseTaskMs: erased.runMs,
@@ -166,7 +186,7 @@ async function checkCase(width, height, radius, testQueue = false) {
   assert.match(await (await fetch(base)).text(), /图片局部擦除/);
   await checkCase(960, 640, 82, true);
   await checkCase(7680, 4320, 250);
-  console.log('通过：本地推理、面积校验、缓存、排队取消、优先级、原尺寸及选区外像素检查。');
+  console.log('通过：本地推理、面积校验、扩选、缓存、排队取消、优先级、原尺寸及扩选外像素检查。');
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

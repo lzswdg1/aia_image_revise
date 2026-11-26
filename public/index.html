@@ -6,6 +6,7 @@
   <title>图片局部擦除</title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/brush.js" defer></script>
+  <script src="/compare.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -24,6 +25,7 @@
             <button id="negative" aria-pressed="false" disabled>− 背景</button>
             <button id="paint" aria-pressed="false" disabled>画笔</button>
             <button id="subtract" aria-pressed="false" disabled>橡皮</button>
+            <button id="undo" disabled>撤销</button>
             <button id="reset" disabled>清除选区</button>
           </div>
         </div>
@@ -41,6 +43,7 @@
           <div id="viewport" hidden>
             <img id="preview" alt="上传的原图" draggable="false" role="button" tabindex="0">
             <img id="overlay" alt="" hidden>
+            <img id="expanded-overlay" alt="" hidden>
             <canvas id="drawing" hidden aria-hidden="true"></canvas>
             <div id="points" aria-hidden="true"></div>
           </div>
@@ -60,6 +63,12 @@
           <button class="secondary" id="import-button" disabled>导入黑白 PNG mask</button>
           <input id="mask-input" type="file" accept="image/png" disabled hidden>
           <a id="mask-download" hidden download="mask.png">下载 mask</a>
+          <div class="expand-controls">
+            <div class="heading"><label for="expand-radius">向外扩选</label><output id="expand-value" for="expand-radius">0 px</output></div>
+            <input id="expand-radius" type="range" min="0" max="24" value="0" disabled>
+            <button id="expand-preview" disabled>预览扩选</button>
+            <p id="expand-status" role="status">按原图像素计算</p>
+          </div>
           <button class="primary" id="erase" disabled>擦除选区</button>
         </section>
         <section class="panel tasks">
@@ -71,9 +80,23 @@
       <section class="panel result" id="result-panel" hidden>
         <div class="heading">
           <div><h2>擦除结果</h2><p id="result-info"></p></div>
-          <div class="tools"><button id="compare" aria-pressed="false">查看原图</button><a class="button" id="download" download="erased.png">下载 PNG</a></div>
+          <div class="tools">
+            <button id="compare" aria-pressed="false">查看原图</button>
+            <button id="compare-zoom" aria-pressed="false">100% 局部</button>
+            <button id="return-to-editor">继续修改选区</button>
+            <a class="button" id="download" download="erased.png">下载 PNG</a>
+          </div>
         </div>
-        <img id="result-image" alt="擦除结果">
+        <div id="compare-scroll" class="compare-scroll" tabindex="0" aria-label="原图和擦除结果，可滚动查看局部">
+          <div id="compare-frame" class="compare-frame">
+            <img id="result-image" alt="擦除结果" draggable="false">
+            <img id="compare-original" alt="原图" draggable="false">
+            <div id="compare-divider" class="compare-divider" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="compare-controls">
+          <span>结果</span><input id="compare-split" type="range" min="0" max="100" value="50" aria-label="原图显示比例"><span>原图</span>
+        </div>
       </section>
     </div>
   </main>
